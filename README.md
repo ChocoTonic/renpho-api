@@ -1,4 +1,8 @@
-# renpho
+# renpho-api
+
+[![PyPI](https://img.shields.io/pypi/v/renpho-api)](https://pypi.org/project/renpho-api/)
+[![CI](https://github.com/danvaneijck/renpho-api/actions/workflows/ci.yml/badge.svg)](https://github.com/danvaneijck/renpho-api/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/pypi/pyversions/renpho-api)](https://pypi.org/project/renpho-api/)
 
 Unofficial Python client for the Renpho Health API. Pull body composition measurements from Renpho smart scales programmatically.
 
@@ -7,13 +11,13 @@ Based on reverse-engineering from [RenphoGarminSync-CLI](https://github.com/fork
 ## Installation
 
 ```bash
-pip install .
+pip install renpho-api
 ```
 
 For `.env` file support (recommended for CLI usage):
 
 ```bash
-pip install ".[dotenv]"
+pip install "renpho-api[dotenv]"
 ```
 
 ## CLI Usage
@@ -130,5 +134,6 @@ renpho-api/
 │   ├── constants.py      # API endpoints, device types, metrics
 │   ├── crypto.py         # AES encryption/decryption
 │   └── export.py         # JSON/CSV export helpers
-└── .gitignore
+├── tests/                # Unit tests
+└── .github/workflows/    # CI + PyPI release automation
 ```
