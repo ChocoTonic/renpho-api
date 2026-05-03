@@ -150,7 +150,9 @@ class RenphoClient:
             except requests.exceptions.HTTPError as e:
                 if attempt == 0:
                     if self.debug:
-                        print(f"  Attempt 1 failed ({e}), retrying with empty object...")
+                        print(
+                            f"  Attempt 1 failed ({e}), retrying with empty object..."
+                        )
                     continue
                 raise
 
@@ -214,8 +216,74 @@ class RenphoClient:
 
         return all_measurements
 
+    def get_body_composition_measurements(
+        self, table_name: str, user_id, *, page_size: int = 50
+    ) -> list[dict]:
+        """Fetch body composition measurements using the newer API endpoint.
+
+        Body composition scales (those with impedance sensors) store data under
+        ``queryBodyCompositionMeasureData`` rather than ``queryAllMeasureDataList``.
+        The server-side count in device info is often reported as 0 for these
+        scales even when data exists, so this method paginates until the server
+        returns an empty page rather than relying on a total count.
+
+        Args:
+            table_name: Dynamic table name from :meth:`get_device_info`.
+            user_id: The user ID to query for.
+            page_size: Records per page (default 50).
+
+        Returns:
+            List of measurement dicts.
+        """
+        all_measurements: list[dict] = []
+        page = 1
+
+        while True:
+            request_data = {
+                "pageNum": page,
+                "pageSize": page_size,
+                "userIds": [str(user_id)],
+                "tableName": table_name,
+            }
+
+            if self.debug:
+                print(f"  Page {page} (got {len(all_measurements)} so far)...")
+
+            encrypted_body = encrypt_request(request_data)
+            result = self._post(
+                ENDPOINTS["body_composition_measurements"], encrypted_body
+            )
+            _check_response(result, f"BodyCompositionMeasurements page {page}")
+
+            if not result.get("data"):
+                break
+
+            page_data = decrypt_response(result["data"])
+
+            if self.debug:
+                if isinstance(page_data, list):
+                    print(f"  Got {len(page_data)} records")
+                else:
+                    print(f"  Response type: {type(page_data)}")
+
+            records = self._extract_records(page_data)
+            if not records:
+                break
+
+            all_measurements.extend(records)
+            if len(records) < page_size:
+                break
+            page += 1
+
+        return all_measurements
+
     def get_all_measurements(self) -> list[dict]:
         """High-level helper: fetch device info then pull all measurements.
+
+        Tries the body composition endpoint first (used by impedance scales).
+        Falls back to the basic measurements endpoint for weight-only scales.
+        The server-side count in device info is unreliable for body composition
+        scales (often reports 0), so this method always attempts a fetch.
 
         Calls :meth:`login` first if no token is set.
 
@@ -234,14 +302,19 @@ class RenphoClient:
             count = scale.get("count", 0)
             user_ids = scale.get("userIds", [])
 
-            if not table_name or count == 0:
+            if not table_name:
                 continue
 
             uid = self.user_id
             if user_ids and uid not in user_ids:
                 uid = user_ids[0]
 
-            measurements = self.get_measurements(table_name, uid, count)
+            # Try body composition endpoint first; it handles both newer
+            # impedance scales and cases where count is incorrectly zero.
+            measurements = self.get_body_composition_measurements(table_name, uid)
+            if not measurements and count > 0:
+                measurements = self.get_measurements(table_name, uid, count)
+
             all_measurements.extend(measurements)
 
         all_measurements.sort(
