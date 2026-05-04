@@ -35,3 +35,8 @@ Repository = "https://github.com/danvaneijck/renpho-api"
 
 [project.scripts]
 renpho = "renpho.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest-cov>=7.1.0",
+]

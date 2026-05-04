@@ -13,6 +13,7 @@ ENDPOINTS = {
     "device_info": "renpho-aggregation/device/count",
     "family": "RenphoHealth/centerUser/queryFamilyMemberList",
     "measurements": "RenphoHealth/scale/queryAllMeasureDataList",
+    "body_composition_measurements": "RenphoHealth/scale/queryBodyCompositionMeasureData",
 }
 
 # Body weight scale device types

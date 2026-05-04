@@ -1,11 +1,13 @@
 """Tests for renpho.client — RenphoClient unit tests."""
 
 import json
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from renpho.client import RenphoAPIError, RenphoClient, _check_response
 from renpho.constants import SUCCESS_CODES
+from renpho.crypto import encrypt_request
 
 
 class TestCheckResponse:
@@ -62,3 +64,83 @@ class TestRenphoClient:
     def test_init_debug(self):
         client = RenphoClient("a@b.com", "p", debug=True)
         assert client.debug is True
+
+
+class TestGetBodyCompositionMeasurements:
+    def _make_client(self):
+        client = RenphoClient("a@b.com", "p")
+        client.token = "tok"
+        client.user_id = 123
+        return client
+
+    def _encrypted_records(self, records):
+        from renpho.crypto import encrypt_request
+        return {"code": 101, "msg": "success", "data": encrypt_request(records)["encryptData"]}
+
+    def test_returns_records_single_page(self):
+        client = self._make_client()
+        records = [{"weight": 70.0, "timeStamp": 1000}]
+        with patch.object(client, "_post", return_value=self._encrypted_records(records)):
+            result = client.get_body_composition_measurements("measurements_info_0", 123)
+        assert result == records
+
+    def test_paginates_until_empty(self):
+        client = self._make_client()
+        page1 = [{"weight": float(i), "timeStamp": i} for i in range(50)]
+        page2 = [{"weight": 99.0, "timeStamp": 9999}]
+        responses = [
+            self._encrypted_records(page1),
+            self._encrypted_records(page2),
+            self._encrypted_records([]),
+        ]
+        with patch.object(client, "_post", side_effect=responses):
+            result = client.get_body_composition_measurements("measurements_info_0", 123)
+        assert len(result) == 51
+
+    def test_returns_empty_when_no_data(self):
+        client = self._make_client()
+        with patch.object(client, "_post", return_value={"code": 101, "msg": "success", "data": None}):
+            result = client.get_body_composition_measurements("measurements_info_0", 123)
+        assert result == []
+
+
+class TestGetAllMeasurementsCountZero:
+    """get_all_measurements should fetch even when device_info reports count=0."""
+
+    def _make_client(self):
+        client = RenphoClient("a@b.com", "p")
+        client.token = "tok"
+        client.user_id = 123
+        return client
+
+    def _encrypted_records(self, records):
+        from renpho.crypto import encrypt_request
+        return {"code": 101, "msg": "success", "data": encrypt_request(records)["encryptData"]}
+
+    def test_fetches_when_count_is_zero(self):
+        client = self._make_client()
+        records = [{"weight": 72.0, "timeStamp": 1000}]
+        device_info = {
+            "scale": [{"tableName": "measurements_info_8", "count": 0, "userIds": [123]}]
+        }
+        with (
+            patch.object(client, "get_device_info", return_value=device_info),
+            patch.object(client, "get_body_composition_measurements", return_value=records),
+        ):
+            result = client.get_all_measurements()
+        assert result == records
+
+    def test_falls_back_to_get_measurements_when_body_composition_empty(self):
+        client = self._make_client()
+        records = [{"weight": 70.0, "timeStamp": 2000}]
+        device_info = {
+            "scale": [{"tableName": "measurements_info_8", "count": 5, "userIds": [123]}]
+        }
+        with (
+            patch.object(client, "get_device_info", return_value=device_info),
+            patch.object(client, "get_body_composition_measurements", return_value=[]),
+            patch.object(client, "get_measurements", return_value=records) as mock_get,
+        ):
+            result = client.get_all_measurements()
+        mock_get.assert_called_once_with("measurements_info_8", 123, 5)
+        assert result == records

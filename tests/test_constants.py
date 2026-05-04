@@ -18,7 +18,14 @@ def test_api_base_url_is_https():
 
 
 def test_endpoints_all_present():
-    required = {"login", "token_time", "device_info", "family", "measurements"}
+    required = {
+        "login",
+        "token_time",
+        "device_info",
+        "family",
+        "measurements",
+        "body_composition_measurements",
+    }
     assert required.issubset(ENDPOINTS.keys())
 
 
