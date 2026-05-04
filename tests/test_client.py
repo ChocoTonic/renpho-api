@@ -129,3 +129,18 @@ class TestGetAllMeasurementsCountZero:
         ):
             result = client.get_all_measurements()
         assert result == records
+
+    def test_falls_back_to_get_measurements_when_body_composition_empty(self):
+        client = self._make_client()
+        records = [{"weight": 70.0, "timeStamp": 2000}]
+        device_info = {
+            "scale": [{"tableName": "measurements_info_8", "count": 5, "userIds": [123]}]
+        }
+        with (
+            patch.object(client, "get_device_info", return_value=device_info),
+            patch.object(client, "get_body_composition_measurements", return_value=[]),
+            patch.object(client, "get_measurements", return_value=records) as mock_get,
+        ):
+            result = client.get_all_measurements()
+        mock_get.assert_called_once_with("measurements_info_8", 123, 5)
+        assert result == records
