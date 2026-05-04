@@ -74,12 +74,20 @@ device_info = client.get_device_info()
 scales = device_info["scale"]
 
 # Fetch from a specific scale table
+# Use get_body_composition_measurements() for scales with impedance sensors
+# (body fat, muscle, etc.) — the server-side count is unreliable for these.
+# Fall back to get_measurements() for weight-only scales.
 table = scales[0]
-measurements = client.get_measurements(
+measurements = client.get_body_composition_measurements(
     table_name=table["tableName"],
     user_id=client.user_id,
-    total_count=table["count"],
 )
+if not measurements:
+    measurements = client.get_measurements(
+        table_name=table["tableName"],
+        user_id=client.user_id,
+        total_count=table["count"],
+    )
 
 # Export
 save_json(measurements, "my_data.json")
