@@ -10,6 +10,7 @@ from .constants import (
     APP_VERSION,
     BODY_WEIGHT_SCALES,
     ENDPOINTS,
+    MEASUREMENT_TABLE_NAMES,
     PLATFORM,
     SUCCESS_CODES,
 )
@@ -277,7 +278,38 @@ class RenphoClient:
 
         return all_measurements
 
-    def get_all_measurements(self) -> list[dict]:
+    def discover_user_tables(self, user_id) -> list[str]:
+        """Probe all measurement tables for a given user_id and return the ones with data.
+
+        Body composition scales shard measurements across 16 tables
+        (``measurements_info_0`` through ``measurements_info_F``). The server
+        only reports the table for the logged-in user via ``device/count``,
+        so for any other linked account this method probes each suffix.
+
+        Args:
+            user_id: The user ID to probe for.
+
+        Returns:
+            List of table names that contain at least one record for ``user_id``.
+        """
+        found: list[str] = []
+        for table in MEASUREMENT_TABLE_NAMES:
+            encrypted_body = encrypt_request({
+                "pageNum": 1,
+                "pageSize": 1,
+                "userIds": [str(user_id)],
+                "tableName": table,
+            })
+            result = self._post(ENDPOINTS["body_composition_measurements"], encrypted_body)
+            if not result.get("data"):
+                continue
+            page_data = decrypt_response(result["data"])
+            records = self._extract_records(page_data)
+            if records:
+                found.append(table)
+        return found
+
+    def get_all_measurements(self, extra_user_ids: list | None = None) -> list[dict]:
         """High-level helper: fetch device info then pull all measurements.
 
         Tries the body composition endpoint first (used by impedance scales).
@@ -287,8 +319,17 @@ class RenphoClient:
 
         Calls :meth:`login` first if no token is set.
 
+        Args:
+            extra_user_ids: Additional user IDs to fetch measurements for. The
+                Renpho API allows a logged-in user to read measurements belonging
+                to other linked accounts (e.g. a separate account from before a
+                Google SSO migration). Each id is probed against all known
+                measurement tables. Pass these when you have multiple Renpho
+                accounts associated with the same physical scale.
+
         Returns:
-            List of measurement dicts sorted by timestamp (newest first).
+            List of measurement dicts sorted by timestamp (newest first),
+            deduped by record ``id``.
         """
         if not self.token:
             self.login()
@@ -317,11 +358,28 @@ class RenphoClient:
 
             all_measurements.extend(measurements)
 
-        all_measurements.sort(
+        for extra_uid in extra_user_ids or []:
+            for table in self.discover_user_tables(extra_uid):
+                all_measurements.extend(
+                    self.get_body_composition_measurements(table, extra_uid)
+                )
+
+        # Dedupe by record id (each measurement is a unique server-side row).
+        seen_ids: set = set()
+        unique: list[dict] = []
+        for m in all_measurements:
+            rid = m.get("id")
+            if rid is not None and rid in seen_ids:
+                continue
+            if rid is not None:
+                seen_ids.add(rid)
+            unique.append(m)
+
+        unique.sort(
             key=lambda m: m.get("timeStamp", 0) or 0,
             reverse=True,
         )
-        return all_measurements
+        return unique
 
     @staticmethod
     def _extract_records(page_data) -> list[dict] | None:

@@ -94,6 +94,44 @@ save_json(measurements, "my_data.json")
 save_csv(measurements, "my_data.csv")
 ```
 
+### Multiple Renpho accounts on one email
+
+Some users end up with **two Renpho accounts under the same email** — for
+example after the Google SSO migration created an orphan account, or after
+re-registering. Each account has its own user ID and its own measurement
+table, so the default `get_all_measurements()` will only return data from
+the account you log in to.
+
+If you know the other account's user ID, pass it in:
+
+```python
+measurements = client.get_all_measurements(
+    extra_user_ids=["5975813831868809088"],
+)
+```
+
+The library will probe every measurement table for that user ID, fetch
+matching records, and dedupe by record `id` so you get a single combined
+timeline.
+
+**How to find your other user ID:**
+
+Unfortunately there is no first-party API endpoint that lists "all
+accounts associated with this email" — Renpho treats accounts as
+independent even when emails collide. Options:
+
+1. **Renpho support** — email them and ask for your user ID(s) on file
+2. **Inspect the iOS / Android app** — sign in to the other account in
+   the official app and look in Settings / Account / Help → Feedback
+   pages (the user ID is sometimes visible there)
+3. **Capture network traffic** — proxy the official app through
+   mitmproxy, sign in, and look at any request body containing
+   `userId` (decrypt with the published AES-128 key — see the
+   reverse-engineering write-up linked at the top of this README)
+
+Once you have the ID, save it alongside your credentials and you won't
+need to discover it again.
+
 ### Error handling
 
 ```python

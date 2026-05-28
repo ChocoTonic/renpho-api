@@ -14,7 +14,13 @@ ENDPOINTS = {
     "family": "RenphoHealth/centerUser/queryFamilyMemberList",
     "measurements": "RenphoHealth/scale/queryAllMeasureDataList",
     "body_composition_measurements": "RenphoHealth/scale/queryBodyCompositionMeasureData",
+    "body_composition_scale_count": "RenphoHealth/scale/bodyCompositionScaleCount",
 }
+
+# Body composition scales shard measurements across 16 tables. Server-side
+# discovery only reports the table for the logged-in user, so the only way
+# to find data belonging to other linked accounts is to probe each suffix.
+MEASUREMENT_TABLE_NAMES = [f"measurements_info_{i:X}" for i in range(16)]
 
 # Body weight scale device types
 BODY_WEIGHT_SCALES = [
